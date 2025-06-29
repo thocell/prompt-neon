@@ -1,8 +1,9 @@
 ![alt image](./public/assets/images/prompt-x.png) 
  
- # 🌟 PromptX
+ # 🌟 Prompt-neon
 
 <div>
+ Support neon database instead of mongodb.
 <b>PromptX</b> is a cutting-edge open-source platform 🌐 designed to empower users to discover, share, and utilize AI-powered prompts 🤖 effortlessly. With its intuitive and user-friendly interface, PromptX allows for seamless prompt creation and sharing. The platform is fully responsive and offers cross-browser compatibility, ensuring a smooth experience across all modern browsers.
 </div>
 
