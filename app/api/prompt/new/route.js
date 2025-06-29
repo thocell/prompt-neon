@@ -1,26 +1,117 @@
-import  connectToDB  from "@utils/database"
-import Prompt from "@models/prompt";
+import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { prisma } from '../../../../lib/prisma'
 
-export const POST = async (req) => {
-  const { userId,prompt, tag } = await req.json();
-
+// POST create new prompt
+export async function POST(request) {
   try {
-    await connectToDB();
-
-    const newPrompt = new Prompt({
-      creator: userId,
-      prompt,
-      tag,
-    });
-
+    const session = await getServerSession()
     
+    if (!session?.user?.email) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
 
-    const data= await newPrompt.save();
+    const { title, content, category, tags, isPremium, pricePoints } = await request.json()
 
+    // Validate required fields
+    if (!title || !content || !category) {
+      return NextResponse.json(
+        { error: 'Title, content, and category are required' },
+        { status: 400 }
+      )
+    }
 
-    return new Response(JSON.stringify(newPrompt),{success:true,'message':'Prompt created successfully'})
+    // Find user by email
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email }
+    })
 
-  } catch (e) {
-    return new Response({ success: false, message: "Failed to create a new prompt",status:500 },);
+    if (!user) {
+      return NextResponse.json(
+        { error: 'User not found' },
+        { status: 404 }
+      )
+    }
+
+    // Check if user has enough points for premium prompt
+    if (isPremium && user.points < 10) {
+      return NextResponse.json(
+        { error: 'Insufficient points to create premium prompt (requires 10 points)' },
+        { status: 400 }
+      )
+    }
+
+    // Create prompt
+    const prompt = await prisma.prompt.create({
+      data: {
+        title,
+        content,
+        category,
+        tags: tags || [],
+        isPremium: isPremium || false,
+        pricePoints: pricePoints || 0,
+        authorId: user.id
+      },
+      include: {
+        author: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            image: true
+          }
+        }
+      }
+    })
+
+    // Award points to user for creating prompt and deduct cost if premium
+    const pointsEarned = isPremium ? 15 : 5
+    const pointsCost = isPremium ? 10 : 0
+    const netPoints = pointsEarned - pointsCost
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        points: { increment: netPoints },
+        totalEarned: { increment: pointsEarned },
+        totalSpent: { increment: pointsCost }
+      }
+    })
+
+    // Record transactions
+    if (pointsEarned > 0) {
+      await prisma.pointTransaction.create({
+        data: {
+          userId: user.id,
+          amount: pointsEarned,
+          type: 'EARNED',
+          description: `Created ${isPremium ? 'premium' : 'free'} prompt: ${title}`,
+          reference: prompt.id
+        }
+      })
+    }
+
+    if (pointsCost > 0) {
+      await prisma.pointTransaction.create({
+        data: {
+          userId: user.id,
+          amount: -pointsCost,
+          type: 'SPENT',
+          description: `Premium prompt creation fee`,
+          reference: prompt.id
+        }
+      })
+    }
+
+    return NextResponse.json({ prompt, success: true })
+  } catch (error) {
+    console.error('Error creating prompt:', error)
+    return NextResponse.json(
+      { error: 'Failed to create prompt' },
+      { status: 500 }
+    )
   }
-};
+}
