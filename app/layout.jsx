@@ -7,6 +7,10 @@ export const metadata = {
   description: 'Discover & Share AI Prompts',
 }
 
+// Force all pages to be dynamic
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 const RootLayout = ({ children }) => (
   <html lang='en'>
     <body>
